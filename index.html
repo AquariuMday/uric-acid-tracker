@@ -142,6 +142,26 @@
       margin-top:14px;padding:14px;border-radius:16px;background:var(--accent-soft);color:#315e49;font-size:12px;line-height:1.5
     }
     .disclaimer{margin-top:14px;color:#929892;font-size:11px;line-height:1.5}
+    .data-safety{margin-top:14px;padding:17px;border-radius:18px;background:#f7f9f6;border:1px solid var(--line)}
+    .data-safety-title{font-size:15px;font-weight:780;margin-bottom:13px}
+    .safety-row{display:grid;grid-template-columns:20px 1fr;gap:9px;padding:9px 0;border-top:1px solid var(--line)}
+    .safety-row:first-of-type{border-top:0;padding-top:0}
+    .safety-icon{font-size:14px;font-weight:800;line-height:20px}
+    .safety-icon.ok{color:var(--accent)}
+    .safety-icon.warn{color:var(--warn)}
+    .safety-label{font-size:12px;font-weight:750}
+    .safety-detail{font-size:11px;color:var(--muted);margin-top:2px;line-height:1.45}
+    .safety-actions{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:13px}
+    .backup-reminder{
+      display:none;align-items:center;justify-content:space-between;gap:14px;
+      margin:0 0 18px;padding:14px 16px;border-radius:18px;
+      background:var(--warn-soft);border:1px solid #f0dfbf;color:#80591d
+    }
+    .backup-reminder.show{display:flex}
+    .backup-reminder strong{display:block;font-size:13px;margin-bottom:3px}
+    .backup-reminder span{font-size:12px;line-height:1.4}
+    .backup-reminder .btn{flex-shrink:0;background:#fff}
+
     .modal-backdrop{
       position:fixed;inset:0;background:rgba(20,25,22,.34);display:none;align-items:center;justify-content:center;
       padding:18px;z-index:20;backdrop-filter:blur(5px)
@@ -202,6 +222,9 @@
       #measurementForm .form-grid{padding-bottom:8px}
       #measurementForm .modal-actions{display:grid;grid-template-columns:auto 1fr;gap:10px}
       #measurementForm .modal-actions .btn.primary{width:100%;padding:13px 16px}
+      .safety-actions{grid-template-columns:1fr}
+      .backup-reminder{align-items:flex-start;flex-direction:column}
+      .backup-reminder .btn{width:100%}
     }
   </style>
 </head>
@@ -213,14 +236,20 @@
         <p>A calm, private place to follow your trend over time.</p>
       </div>
       <div class="top-actions">
-        <button class="btn" id="importBackupBtn">Import backup</button>
-        <button class="btn" id="backupBtn">Backup data</button>
         <button class="btn" id="exportBtn">Export CSV</button>
         <button class="btn danger" id="clearBtn">Clear records</button>
         <button class="btn primary" id="addBtn">＋ Add measurement</button>
         <input id="backupFileInput" type="file" accept=".json,application/json" hidden />
       </div>
     </header>
+
+    <div class="backup-reminder" id="backupReminder">
+      <div>
+        <strong>External backup recommended</strong>
+        <span id="backupReminderText">Your portable JSON backup is getting old.</span>
+      </div>
+      <button class="btn" id="backupNowBtn" type="button">Backup now</button>
+    </div>
 
     <section class="grid">
       <article class="card hero">
@@ -324,21 +353,39 @@
             </div>
           </div>
         </div>
-        <div class="target-box" style="margin-top:14px">
-          <div class="target-row">
+        <div class="data-safety">
+          <div class="data-safety-title">Data Safety</div>
+
+          <div class="safety-row">
+            <div class="safety-icon ok">✓</div>
             <div>
-              <div style="font-size:13px;font-weight:700">Automatic JSON backup</div>
-              <div id="autoBackupStatus" style="font-size:11px;color:var(--muted);margin-top:4px;line-height:1.4">
-                Checking browser support…
-              </div>
-            </div>
-            <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">
-              <button class="btn" id="autoBackupBtn" type="button" style="padding:9px 12px;white-space:nowrap">Set up</button>
-              <button class="btn danger" id="disconnectBackupBtn" type="button" style="padding:9px 12px;white-space:nowrap;display:none">Disconnect</button>
+              <div class="safety-label">Browser storage</div>
+              <div class="safety-detail" id="browserStorageStatus">Saved automatically</div>
             </div>
           </div>
+
+          <div class="safety-row">
+            <div class="safety-icon ok" id="internalBackupIcon">✓</div>
+            <div>
+              <div class="safety-label">Internal backup</div>
+              <div class="safety-detail" id="internalBackupStatus">Preparing internal backup…</div>
+            </div>
+          </div>
+
+          <div class="safety-row">
+            <div class="safety-icon warn" id="externalBackupIcon">⚠</div>
+            <div>
+              <div class="safety-label">External backup</div>
+              <div class="safety-detail" id="externalBackupStatus">No external backup yet</div>
+            </div>
+          </div>
+
+          <div class="safety-actions">
+            <button class="btn primary" id="backupBtn" type="button">Backup to Files</button>
+            <button class="btn" id="importBackupBtn" type="button">Restore backup</button>
+          </div>
         </div>
-        <div class="privacy"><strong>Private by default.</strong><br>Your measurements are stored only in this browser using local storage. Use <strong>Backup data</strong> to move your complete history to another device. After you select a backup file, you can choose <strong>Merge</strong> to keep current records or <strong>Replace</strong> to restore only the backup file.</div>
+        <div class="privacy"><strong>Private by default.</strong><br>Your measurements are saved automatically in this browser, with a second internal browser backup. Use <strong>Backup to Files</strong> for a portable JSON copy you can keep in Files or iCloud Drive.</div>
         <div class="disclaimer">This tracker is for personal record-keeping and does not diagnose or interpret a medical condition. Use the target recommended for you by your clinician or laboratory.</div>
       </aside>
     </section>
@@ -421,9 +468,12 @@
   <script>
     const STORAGE_KEY = "uric_acid_tracker_records_v1";
     const TARGET_KEY = "uric_acid_tracker_target_v1";
-    const AUTO_BACKUP_DB = "uric_acid_tracker_backup_db_v1";
-    const AUTO_BACKUP_STORE = "handles";
-    const AUTO_BACKUP_HANDLE_KEY = "jsonBackupHandle";
+    const INTERNAL_BACKUP_DB = "uric_acid_tracker_internal_backup_v1";
+    const INTERNAL_BACKUP_STORE = "snapshots";
+    const INTERNAL_BACKUP_KEY = "latest";
+    const LAST_EXTERNAL_BACKUP_KEY = "uric_acid_tracker_last_external_backup_v1";
+    const LAST_EXTERNAL_COUNT_KEY = "uric_acid_tracker_last_external_count_v1";
+    const FIRST_DATA_SAVED_KEY = "uric_acid_tracker_first_data_saved_v1";
 
     let records = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]").map(r => ({
       ...r,
@@ -432,7 +482,6 @@
     let range = "30";
     let metric = "uric";
     let pendingImport = null;
-    let autoBackupHandle = null;
     let target = Number(localStorage.getItem(TARGET_KEY) || 420);
 
     const $ = (id) => document.getElementById(id);
@@ -506,13 +555,13 @@
       };
     }
 
-    function openAutoBackupDB() {
+    function openInternalBackupDB() {
       return new Promise((resolve, reject) => {
-        const req = indexedDB.open(AUTO_BACKUP_DB, 1);
+        const req = indexedDB.open(INTERNAL_BACKUP_DB, 1);
         req.onupgradeneeded = () => {
           const db = req.result;
-          if (!db.objectStoreNames.contains(AUTO_BACKUP_STORE)) {
-            db.createObjectStore(AUTO_BACKUP_STORE);
+          if (!db.objectStoreNames.contains(INTERNAL_BACKUP_STORE)) {
+            db.createObjectStore(INTERNAL_BACKUP_STORE);
           }
         };
         req.onsuccess = () => resolve(req.result);
@@ -520,158 +569,184 @@
       });
     }
 
-    async function saveAutoBackupHandle(handle) {
-      const db = await openAutoBackupDB();
-      return new Promise((resolve, reject) => {
-        const tx = db.transaction(AUTO_BACKUP_STORE, "readwrite");
-        tx.objectStore(AUTO_BACKUP_STORE).put(handle, AUTO_BACKUP_HANDLE_KEY);
-        tx.oncomplete = () => { db.close(); resolve(); };
-        tx.onerror = () => { db.close(); reject(tx.error); };
-      });
-    }
+    async function writeInternalBackup(payload = buildBackupPayload()) {
+      const status = $("internalBackupStatus");
+      const icon = $("internalBackupIcon");
+      if (status) status.textContent = "Updating…";
 
-    async function deleteAutoBackupHandle() {
-      const db = await openAutoBackupDB();
-      return new Promise((resolve, reject) => {
-        const tx = db.transaction(AUTO_BACKUP_STORE, "readwrite");
-        tx.objectStore(AUTO_BACKUP_STORE).delete(AUTO_BACKUP_HANDLE_KEY);
-        tx.oncomplete = () => { db.close(); resolve(); };
-        tx.onerror = () => { db.close(); reject(tx.error); };
-      });
-    }
-
-    async function loadAutoBackupHandle() {
-      const db = await openAutoBackupDB();
-      return new Promise((resolve, reject) => {
-        const tx = db.transaction(AUTO_BACKUP_STORE, "readonly");
-        const req = tx.objectStore(AUTO_BACKUP_STORE).get(AUTO_BACKUP_HANDLE_KEY);
-        req.onsuccess = () => resolve(req.result || null);
-        req.onerror = () => reject(req.error);
-        tx.oncomplete = () => db.close();
-      });
-    }
-
-    function setAutoBackupStatus(message, active=false) {
-      const status = $("autoBackupStatus");
-      const btn = $("autoBackupBtn");
-      const disconnectBtn = $("disconnectBackupBtn");
-      if (!status || !btn) return;
-
-      status.textContent = message;
-      status.style.color = active ? "var(--accent)" : "var(--muted)";
-      btn.textContent = autoBackupHandle ? "Change file" : "Set up";
-
-      if (disconnectBtn) {
-        disconnectBtn.style.display = autoBackupHandle ? "inline-flex" : "none";
-      }
-    }
-
-    async function writeAutoBackupFile(showFeedback=false) {
-      if (!autoBackupHandle) return false;
       try {
-        if (autoBackupHandle.queryPermission) {
-          const permission = await autoBackupHandle.queryPermission({mode:"readwrite"});
-          if (permission !== "granted") {
-            setAutoBackupStatus("Tap Set up to resume automatic file backup.");
-            return false;
-          }
+        const db = await openInternalBackupDB();
+        await new Promise((resolve, reject) => {
+          const tx = db.transaction(INTERNAL_BACKUP_STORE, "readwrite");
+          tx.objectStore(INTERNAL_BACKUP_STORE).put(payload, INTERNAL_BACKUP_KEY);
+          tx.oncomplete = () => { db.close(); resolve(); };
+          tx.onerror = () => { db.close(); reject(tx.error); };
+        });
+
+        if (status) status.textContent = "Up to date";
+        if (icon) {
+          icon.textContent = "✓";
+          icon.className = "safety-icon ok";
         }
-
-        const writable = await autoBackupHandle.createWritable();
-        await writable.write(JSON.stringify(buildBackupPayload(), null, 2));
-        await writable.close();
-
-        setAutoBackupStatus("On · latest backup updated", true);
-        if (showFeedback) showToast("Automatic backup updated");
         return true;
       } catch (err) {
-        setAutoBackupStatus("Automatic file backup needs attention.");
+        if (status) status.textContent = "Internal backup could not be updated";
+        if (icon) {
+          icon.textContent = "⚠";
+          icon.className = "safety-icon warn";
+        }
         return false;
       }
     }
 
-    async function setupAutoBackup() {
-      if (!("showSaveFilePicker" in window)) {
-        alert(
-          "This browser does not allow a webpage to keep overwriting the same local JSON file automatically. " +
-          "Your data is still saved immediately in this browser, and you can use Backup data whenever you want a portable JSON copy."
-        );
-        setAutoBackupStatus("Same-file automatic backup is not available in this browser.");
-        return;
-      }
-
+    async function readInternalBackup() {
       try {
-        // Always open the file picker when the user taps Set up / Change file.
-        // This allows switching to a different backup file at any time.
-        const handle = await window.showSaveFilePicker({
-          suggestedName: "uric-acid-auto-backup.json",
-          types: [{
-            description: "JSON backup",
-            accept: {"application/json": [".json"]}
-          }]
+        const db = await openInternalBackupDB();
+        return await new Promise((resolve, reject) => {
+          const tx = db.transaction(INTERNAL_BACKUP_STORE, "readonly");
+          const req = tx.objectStore(INTERNAL_BACKUP_STORE).get(INTERNAL_BACKUP_KEY);
+          req.onsuccess = () => resolve(req.result || null);
+          req.onerror = () => reject(req.error);
+          tx.oncomplete = () => db.close();
         });
-
-        autoBackupHandle = handle;
-        await saveAutoBackupHandle(handle);
-        await writeAutoBackupFile(true);
       } catch (err) {
-        if (err && err.name === "AbortError") return;
-        setAutoBackupStatus("Automatic backup could not be enabled.");
+        return null;
       }
     }
 
-    async function disconnectAutoBackup() {
-      if (!autoBackupHandle) return;
+    function formatBackupDate(timestamp) {
+      if (!timestamp) return "";
+      const d = new Date(timestamp);
+      return new Intl.DateTimeFormat(undefined, {
+        year:"numeric", month:"short", day:"numeric"
+      }).format(d);
+    }
 
-      const ok = confirm(
-        "Disconnect automatic JSON backup?\n\n" +
-        "Your measurements will stay in this browser. The existing JSON file will not be deleted."
+    function getExternalBackupState() {
+      const lastTimestamp = Number(localStorage.getItem(LAST_EXTERNAL_BACKUP_KEY) || 0);
+      const lastCount = Number(localStorage.getItem(LAST_EXTERNAL_COUNT_KEY) || 0);
+      const firstDataTimestamp = Number(localStorage.getItem(FIRST_DATA_SAVED_KEY) || 0);
+      const now = Date.now();
+      const dayMs = 24 * 60 * 60 * 1000;
+
+      const daysSinceBackup = lastTimestamp
+        ? Math.floor((now - lastTimestamp) / dayMs)
+        : null;
+
+      const daysSinceFirstData = firstDataTimestamp
+        ? Math.floor((now - firstDataTimestamp) / dayMs)
+        : 0;
+
+      const newRecords = lastTimestamp
+        ? Math.max(0, records.length - lastCount)
+        : records.length;
+
+      const needsReminder = records.length > 0 && (
+        (lastTimestamp && daysSinceBackup >= 7) ||
+        (!lastTimestamp && daysSinceFirstData >= 7) ||
+        newRecords >= 10
       );
-      if (!ok) return;
 
-      try {
-        await deleteAutoBackupHandle();
-      } catch (err) {
-        // Even if IndexedDB cleanup fails, stop using the handle in this session.
-      }
-
-      autoBackupHandle = null;
-      setAutoBackupStatus("Off · no automatic backup file connected.");
-      showToast("Automatic backup disconnected");
+      return {
+        lastTimestamp,
+        lastCount,
+        daysSinceBackup,
+        daysSinceFirstData,
+        newRecords,
+        needsReminder
+      };
     }
 
-    async function initAutoBackup() {
-      if (!("showSaveFilePicker" in window)) {
-        setAutoBackupStatus("Portable auto-backup is not supported by this browser.");
-        return;
-      }
+    function updateDataSafety() {
+      const browserStatus = $("browserStorageStatus");
+      if (browserStatus) browserStatus.textContent = "Saved automatically";
 
-      try {
-        autoBackupHandle = await loadAutoBackupHandle();
-        if (!autoBackupHandle) {
-          setAutoBackupStatus("Optional · choose one JSON file to keep updated automatically.");
-          return;
-        }
+      const state = getExternalBackupState();
+      const externalStatus = $("externalBackupStatus");
+      const externalIcon = $("externalBackupIcon");
+      const reminder = $("backupReminder");
+      const reminderText = $("backupReminderText");
 
-        const permission = autoBackupHandle.queryPermission
-          ? await autoBackupHandle.queryPermission({mode:"readwrite"})
-          : "prompt";
-
-        if (permission === "granted") {
-          setAutoBackupStatus("On · backup file connected", true);
+      if (externalStatus) {
+        if (!state.lastTimestamp) {
+          externalStatus.textContent = "No external backup yet";
         } else {
-          setAutoBackupStatus("Backup file remembered · tap Change file to choose another file.");
+          const ago = state.daysSinceBackup === 0
+            ? "today"
+            : `${state.daysSinceBackup} day${state.daysSinceBackup === 1 ? "" : "s"} ago`;
+          externalStatus.textContent = `Last backup: ${formatBackupDate(state.lastTimestamp)} · ${ago}`;
         }
-      } catch (err) {
-        setAutoBackupStatus("Optional · choose one JSON file to keep updated automatically.");
       }
+
+      if (externalIcon) {
+        externalIcon.textContent = state.needsReminder ? "⚠" : (state.lastTimestamp ? "✓" : "⚠");
+        externalIcon.className = state.needsReminder || !state.lastTimestamp
+          ? "safety-icon warn"
+          : "safety-icon ok";
+      }
+
+      if (reminder && reminderText) {
+        if (state.needsReminder) {
+          let message;
+          if (state.newRecords >= 10 && state.lastTimestamp) {
+            message = `${state.newRecords} new records have been added since your last external backup.`;
+          } else if (state.newRecords >= 10) {
+            message = `You have ${records.length} records and no external backup yet.`;
+          } else if (state.lastTimestamp) {
+            message = `Your last external backup was ${state.daysSinceBackup} days ago.`;
+          } else {
+            message = "You have not made an external backup in the last 7 days.";
+          }
+          reminderText.textContent = message;
+          reminder.classList.add("show");
+        } else {
+          reminder.classList.remove("show");
+        }
+      }
+    }
+
+    async function initDataSafety() {
+      if (records.length > 0 && !localStorage.getItem(FIRST_DATA_SAVED_KEY)) {
+        localStorage.setItem(FIRST_DATA_SAVED_KEY, String(Date.now()));
+      }
+
+      const internal = await readInternalBackup();
+
+      // Recovery path: if browser storage is unexpectedly empty but the second
+      // browser copy still exists, restore it automatically.
+      if (!records.length && internal && Array.isArray(internal.records) && internal.records.length) {
+        records = internal.records.map(r => ({
+          ...r,
+          source: r.uric !== "" && r.uric != null
+            ? (r.source === "hospital" ? "hospital" : "self")
+            : ""
+        }));
+
+        if (Number(internal.target) > 0) {
+          target = Number(internal.target);
+          localStorage.setItem(TARGET_KEY, String(target));
+          targetInput.value = target;
+          targetDisplay.textContent = target;
+        }
+
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
+        renderAll();
+        showToast("Recovered from internal backup");
+      }
+
+      await writeInternalBackup();
+      updateDataSafety();
     }
 
     function save() {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
-      // File backup runs in addition to browser storage. If unsupported or not configured,
-      // this quietly does nothing and the normal local save still succeeds.
-      writeAutoBackupFile(false);
+
+      if (records.length > 0 && !localStorage.getItem(FIRST_DATA_SAVED_KEY)) {
+        localStorage.setItem(FIRST_DATA_SAVED_KEY, String(Date.now()));
+      }
+
+      writeInternalBackup();
+      updateDataSafety();
     }
 
     function showToast(message) {
@@ -1057,8 +1132,6 @@
       showToast("Measurement saved");
     });
 
-    $("autoBackupBtn").addEventListener("click", setupAutoBackup);
-    $("disconnectBackupBtn").addEventListener("click", disconnectAutoBackup);
 
     $("addBtn").addEventListener("click", openModal);
     $("closeModal").addEventListener("click", closeModal);
@@ -1095,7 +1168,8 @@
       target = v;
       localStorage.setItem(TARGET_KEY, String(target));
       targetDisplay.textContent = target;
-      writeAutoBackupFile(false);
+      writeInternalBackup();
+      updateDataSafety();
       renderAll();
       showToast("Target updated");
     });
@@ -1119,7 +1193,7 @@
       showToast("All records cleared");
     });
 
-    $("backupBtn").addEventListener("click", () => {
+    function downloadExternalBackup() {
       const backup = buildBackupPayload();
       const blob = new Blob([JSON.stringify(backup, null, 2)], {type:"application/json;charset=utf-8;"});
       const url = URL.createObjectURL(blob);
@@ -1130,8 +1204,15 @@
       a.click();
       a.remove();
       URL.revokeObjectURL(url);
-      showToast("Backup file created");
-    });
+
+      localStorage.setItem(LAST_EXTERNAL_BACKUP_KEY, String(Date.now()));
+      localStorage.setItem(LAST_EXTERNAL_COUNT_KEY, String(records.length));
+      updateDataSafety();
+      showToast("Backup ready to save in Files");
+    }
+
+    $("backupBtn").addEventListener("click", downloadExternalBackup);
+    $("backupNowBtn").addEventListener("click", downloadExternalBackup);
 
     $("importBackupBtn").addEventListener("click", () => {
       $("backupFileInput").value = "";
@@ -1286,7 +1367,7 @@
     });
 
     renderAll();
-    initAutoBackup();
+    initDataSafety();
   </script>
 </body>
 </html>
