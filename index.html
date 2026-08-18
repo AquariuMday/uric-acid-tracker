@@ -1,0 +1,1072 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#f7f8f5" />
+  <title>Uric Acid Tracker</title>
+  <style>
+    :root{
+      --bg:#f6f7f3;
+      --card:#ffffff;
+      --text:#1d241f;
+      --muted:#788078;
+      --line:#e7e9e3;
+      --accent:#2f6b4f;
+      --accent-soft:#e7f1eb;
+      --warn:#a56a19;
+      --warn-soft:#fff3df;
+      --danger:#a14444;
+      --danger-soft:#fbeaea;
+      --self:#2f6b4f;
+      --self-soft:#e7f1eb;
+      --hospital:#b44d4d;
+      --hospital-soft:#f8e8e8;
+      --shadow:0 16px 40px rgba(29,36,31,.06);
+      --radius:24px;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      background:linear-gradient(180deg,#f9faf7 0%,var(--bg) 35%,#f3f5f0 100%);
+      color:var(--text);
+      font-family:Inter,ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
+      min-height:100vh;
+    }
+    button,input,textarea,select{font:inherit}
+    button{cursor:pointer}
+    .app{max-width:1180px;margin:0 auto;padding:34px 20px 60px}
+    .topbar{
+      display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:26px
+    }
+    .brand h1{font-size:28px;line-height:1.1;margin:0 0 6px;letter-spacing:-.7px}
+    .brand p{margin:0;color:var(--muted);font-size:14px}
+    .top-actions{display:flex;gap:10px;flex-wrap:wrap}
+    .btn{
+      border:0;border-radius:999px;padding:11px 16px;background:#fff;color:var(--text);
+      box-shadow:0 0 0 1px var(--line) inset;font-weight:650;transition:.18s ease
+    }
+    .btn:hover{transform:translateY(-1px);box-shadow:0 0 0 1px #d8ddd5 inset,0 7px 18px rgba(29,36,31,.06)}
+    .btn.primary{background:var(--accent);color:#fff;box-shadow:none}
+    .btn.primary:hover{background:#275d44}
+    .btn.danger{color:var(--danger);background:#fff}
+    .btn.danger:hover{background:var(--danger-soft);box-shadow:0 0 0 1px #efd1d1 inset}
+    .grid{
+      display:grid;grid-template-columns:1.02fr 1.6fr;gap:18px
+    }
+    .card{
+      background:rgba(255,255,255,.92);border:1px solid rgba(229,232,225,.95);border-radius:var(--radius);
+      box-shadow:var(--shadow)
+    }
+    .hero{padding:28px;min-height:340px;display:flex;flex-direction:column;justify-content:space-between}
+    .eyebrow{font-size:13px;color:var(--muted);font-weight:700;letter-spacing:.02em}
+    .value-row{display:flex;align-items:flex-end;gap:10px;margin-top:18px}
+    .value{font-size:64px;letter-spacing:-3px;font-weight:780;line-height:.95}
+    .unit{color:var(--muted);font-weight:650;margin-bottom:8px}
+    .status-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:15px}
+    .pill{
+      display:inline-flex;align-items:center;border-radius:999px;padding:8px 11px;font-size:13px;font-weight:750
+    }
+    .pill.good{background:var(--accent-soft);color:var(--accent)}
+    .pill.warn{background:var(--warn-soft);color:var(--warn)}
+    .pill.danger{background:var(--danger-soft);color:var(--danger)}
+    .delta{font-size:14px;color:var(--muted)}
+    .hero-foot{
+      display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:28px
+    }
+    .mini{padding:15px 16px;border-radius:18px;background:#f8f9f6;border:1px solid var(--line)}
+    .mini .label{color:var(--muted);font-size:12px;margin-bottom:5px}
+    .mini .number{font-size:20px;font-weight:750}
+    .trend{padding:24px;min-height:340px}
+    .section-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+    .section-head h2{margin:0;font-size:18px;letter-spacing:-.25px}
+    .section-head p{margin:5px 0 0;color:var(--muted);font-size:13px}
+    .segmented{
+      display:flex;background:#f3f5f1;border-radius:999px;padding:4px;gap:2px
+    }
+    .segmented button{
+      border:0;background:transparent;color:var(--muted);padding:7px 11px;border-radius:999px;font-size:12px;font-weight:750
+    }
+    .segmented button.active{background:#fff;color:var(--text);box-shadow:0 1px 5px rgba(0,0,0,.06)}
+    .trend-controls{display:flex;flex-direction:column;align-items:flex-end;gap:10px}
+    .metric-select{
+      border:1px solid var(--line);border-radius:12px;padding:9px 12px;background:#fff;color:var(--text);
+      outline:none;font-size:13px;font-weight:650
+    }
+    .metric-select:focus,select:focus{border-color:#9eb7aa;box-shadow:0 0 0 3px rgba(47,107,79,.09)}
+    .chart-wrap{height:230px;margin-top:17px;position:relative}
+    #chart{width:100%;height:100%;display:block}
+    .empty-chart{
+      position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;
+      color:var(--muted);font-size:14px;padding:25px
+    }
+    .stats{
+      display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:18px
+    }
+    .stat{padding:17px 18px}
+    .stat .label{font-size:12px;color:var(--muted);margin-bottom:7px}
+    .stat .number{font-weight:780;font-size:21px}
+    .bottom{
+      display:grid;grid-template-columns:1.55fr .85fr;gap:18px;margin-top:18px
+    }
+    .history{padding:24px;overflow:hidden}
+    .history-list{margin-top:15px}
+    .record{
+      display:grid;grid-template-columns:1fr .92fr .92fr .8fr 1.45fr auto;gap:14px;align-items:center;
+      padding:14px 8px;border-top:1px solid var(--line)
+    }
+    .record.header{border-top:0;color:var(--muted);font-size:11px;font-weight:750;text-transform:uppercase;letter-spacing:.04em}
+    .record .ua{font-weight:760}
+    .record .note{color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .source-tag{display:inline-flex;align-items:center;border-radius:999px;padding:6px 10px;font-size:12px;font-weight:750;white-space:nowrap}
+    .source-self{background:var(--self-soft);color:var(--self)}
+    .source-hospital{background:var(--hospital-soft);color:var(--hospital)}
+    .chart-legend{display:flex;gap:18px;align-items:center;flex-wrap:wrap;margin-top:8px;color:var(--muted);font-size:12px}
+    .legend-item{display:inline-flex;align-items:center;gap:8px}
+    .legend-dot{width:10px;height:10px;border-radius:50%;display:inline-block}
+    .icon-btn{
+      border:0;background:transparent;color:#a1a7a0;padding:7px;border-radius:10px;font-size:16px
+    }
+    .icon-btn:hover{background:#f5f6f3;color:var(--danger)}
+    .side{padding:24px}
+    .side h2{font-size:18px;margin:0 0 8px}
+    .side p{color:var(--muted);font-size:13px;line-height:1.6;margin:0 0 18px}
+    .target-box{background:#f7f9f6;border:1px solid var(--line);border-radius:18px;padding:16px}
+    .target-row{display:flex;align-items:center;justify-content:space-between;gap:12px}
+    .target-row label{font-size:13px;font-weight:700}
+    .target-input{
+      width:105px;border:1px solid var(--line);background:#fff;border-radius:12px;padding:9px 10px;text-align:right;outline:none
+    }
+    .target-input:focus,input:focus,textarea:focus{border-color:#9eb7aa;box-shadow:0 0 0 3px rgba(47,107,79,.09)}
+    .privacy{
+      margin-top:14px;padding:14px;border-radius:16px;background:var(--accent-soft);color:#315e49;font-size:12px;line-height:1.5
+    }
+    .disclaimer{margin-top:14px;color:#929892;font-size:11px;line-height:1.5}
+    .modal-backdrop{
+      position:fixed;inset:0;background:rgba(20,25,22,.34);display:none;align-items:center;justify-content:center;
+      padding:18px;z-index:20;backdrop-filter:blur(5px)
+    }
+    .modal-backdrop.open{display:flex}
+    .modal{
+      width:min(540px,100%);background:#fff;border-radius:26px;box-shadow:0 30px 90px rgba(0,0,0,.18);padding:24px
+    }
+    .modal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px}
+    .modal h2{margin:0;font-size:21px}
+    .close{
+      width:36px;height:36px;border:0;border-radius:50%;background:#f4f5f2;color:#697169;font-size:22px
+    }
+    .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+    .field{display:flex;flex-direction:column;gap:7px}
+    .field.full{grid-column:1/-1}
+    .field label{font-size:12px;color:var(--muted);font-weight:700}
+    .field input,.field textarea{
+      border:1px solid var(--line);border-radius:14px;padding:12px 13px;outline:none;background:#fbfcfa;color:var(--text)
+    }
+    .field textarea{min-height:90px;resize:vertical}
+    .modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:20px}
+    .no-records{padding:24px 8px;color:var(--muted);font-size:14px;border-top:1px solid var(--line)}
+    .toast{
+      position:fixed;right:22px;bottom:22px;background:#1f2923;color:#fff;border-radius:14px;padding:12px 15px;
+      font-size:13px;box-shadow:0 12px 30px rgba(0,0,0,.15);opacity:0;transform:translateY(8px);pointer-events:none;
+      transition:.2s ease;z-index:30
+    }
+    .toast.show{opacity:1;transform:translateY(0)}
+    @media (max-width:900px){
+      .grid,.bottom{grid-template-columns:1fr}
+      .stats{grid-template-columns:repeat(2,1fr)}
+    }
+    @media (max-width:650px){
+      .app{padding:22px 14px 40px}
+      .topbar{align-items:flex-start;flex-direction:column}
+      .hero,.trend,.history,.side{padding:20px}
+      .value{font-size:54px}
+      .record{grid-template-columns:1fr auto auto auto}
+      .record.header{display:none}
+      .record .source,.record .weight,.record .note{display:none}
+      .record .date::before{content:"Date · ";color:var(--muted);font-weight:500}
+      .form-grid{grid-template-columns:1fr}
+      .field.full{grid-column:auto}
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <header class="topbar">
+      <div class="brand">
+        <h1>Uric Acid Tracker</h1>
+        <p>A calm, private place to follow your trend over time.</p>
+      </div>
+      <div class="top-actions">
+        <button class="btn" id="importBackupBtn">Import backup</button>
+        <button class="btn" id="backupBtn">Backup data</button>
+        <button class="btn" id="exportBtn">Export CSV</button>
+        <button class="btn danger" id="clearBtn">Clear records</button>
+        <button class="btn primary" id="addBtn">＋ Add measurement</button>
+        <input id="backupFileInput" type="file" accept=".json,application/json" hidden />
+      </div>
+    </header>
+
+    <section class="grid">
+      <article class="card hero">
+        <div>
+          <div class="eyebrow">LATEST READING</div>
+          <div class="value-row">
+            <div class="value" id="latestValue">—</div>
+            <div class="unit">μmol/L</div>
+          </div>
+          <div class="status-row">
+            <span class="pill good" id="statusPill">No data yet</span>
+            <span class="delta" id="deltaText">Add your first measurement to begin.</span>
+          </div>
+        </div>
+        <div class="hero-foot">
+          <div class="mini">
+            <div class="label">Last measured</div>
+            <div class="number" id="lastDate">—</div>
+          </div>
+          <div class="mini">
+            <div class="label">Target threshold</div>
+            <div class="number"><span id="targetDisplay">420</span> <small>μmol/L</small></div>
+          </div>
+        </div>
+      </article>
+
+      <article class="card trend">
+        <div class="section-head">
+          <div>
+            <h2>Trend</h2>
+            <p>See the direction, not just a single number.</p>
+          </div>
+          <div class="trend-controls">
+            <select id="metricSelect" class="metric-select" aria-label="Trend metric">
+              <option value="uric">Uric Acid</option>
+              <option value="weight">Weight</option>
+            </select>
+            <div class="segmented" aria-label="Trend range">
+              <button data-range="7">7D</button>
+              <button data-range="30" class="active">30D</button>
+              <button data-range="90">90D</button>
+              <button data-range="all">All</button>
+            </div>
+          </div>
+        </div>
+        <div class="chart-wrap">
+          <svg id="chart" viewBox="0 0 720 230" preserveAspectRatio="none" aria-label="Uric acid trend chart"></svg>
+          <div class="empty-chart" id="emptyChart">Your chart will appear here after you add measurements.</div>
+        </div>
+        <div class="chart-legend">
+          <span class="legend-item"><span class="legend-dot" style="background:var(--self)"></span>Self-test</span>
+          <span class="legend-item"><span class="legend-dot" style="background:var(--hospital)"></span>Hospital</span>
+        </div>
+      </article>
+    </section>
+
+    <section class="stats">
+      <article class="card stat">
+        <div class="label">Average</div>
+        <div class="number" id="avgStat">—</div>
+      </article>
+      <article class="card stat">
+        <div class="label">Lowest</div>
+        <div class="number" id="lowStat">—</div>
+      </article>
+      <article class="card stat">
+        <div class="label">Highest</div>
+        <div class="number" id="highStat">—</div>
+      </article>
+      <article class="card stat">
+        <div class="label">Measurements</div>
+        <div class="number" id="countStat">0</div>
+      </article>
+    </section>
+
+    <section class="bottom">
+      <article class="card history">
+        <div class="section-head">
+          <div>
+            <h2>History</h2>
+            <p>Your most recent measurements appear first.</p>
+          </div>
+        </div>
+        <div class="history-list" id="historyList">
+          <div class="record header">
+            <div>Date</div><div>Uric acid</div><div>Source</div><div>Weight</div><div>Note</div><div></div>
+          </div>
+          <div class="no-records">No measurements yet.</div>
+        </div>
+      </article>
+
+      <aside class="card side">
+        <h2>Your target</h2>
+        <p>Set the threshold you want the dashboard to use for visual highlighting.</p>
+        <div class="target-box">
+          <div class="target-row">
+            <label for="targetInput">Threshold</label>
+            <div>
+              <input class="target-input" id="targetInput" type="number" min="1" step="1" value="420" />
+              <span style="font-size:12px;color:var(--muted)"> μmol/L</span>
+            </div>
+          </div>
+        </div>
+        <div class="privacy"><strong>Private by default.</strong><br>Your measurements are stored only in this browser using local storage. Use <strong>Backup data</strong> to move your complete history to another device. After you select a backup file, you can choose <strong>Merge</strong> to keep current records or <strong>Replace</strong> to restore only the backup file.</div>
+        <div class="disclaimer">This tracker is for personal record-keeping and does not diagnose or interpret a medical condition. Use the target recommended for you by your clinician or laboratory.</div>
+      </aside>
+    </section>
+  </main>
+
+  <div class="modal-backdrop" id="modalBackdrop">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+      <div class="modal-head">
+        <h2 id="modalTitle">Add measurement</h2>
+        <button class="close" id="closeModal" aria-label="Close">×</button>
+      </div>
+      <form id="measurementForm">
+        <div class="form-grid">
+          <div class="field">
+            <label for="dateInput">Date</label>
+            <input id="dateInput" type="date" required />
+          </div>
+          <div class="field">
+            <label for="uricInput">Uric acid (μmol/L) · optional</label>
+            <input id="uricInput" type="number" min="1" step="1" placeholder="e.g. 420" />
+          </div>
+          <div class="field">
+            <label for="sourceInput">Source</label>
+            <select id="sourceInput" style="border:1px solid var(--line);border-radius:14px;padding:12px 13px;outline:none;background:#fbfcfa;color:var(--text)">
+              <option value="self">Self-test</option>
+              <option value="hospital">Hospital</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="weightInput">Weight (kg) · optional</label>
+            <input id="weightInput" type="number" min="1" step="0.1" placeholder="e.g. 62.1" />
+          </div>
+          <div class="field">
+            <label for="timeInput">Time · optional</label>
+            <input id="timeInput" type="time" />
+          </div>
+          <div class="field full">
+            <label for="noteInput">Notes · optional</label>
+            <textarea id="noteInput" placeholder="Food, alcohol, sleep, exercise, medicine, symptoms…"></textarea>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn" id="cancelBtn">Cancel</button>
+          <button type="submit" class="btn primary">Save measurement</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+
+  <div class="modal-backdrop" id="importChoiceBackdrop">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="importChoiceTitle">
+      <div class="modal-head">
+        <h2 id="importChoiceTitle">Import backup</h2>
+        <button class="close" id="closeImportChoice" aria-label="Close">×</button>
+      </div>
+
+      <p id="importChoiceSummary" style="margin:0 0 18px;color:var(--muted);font-size:14px;line-height:1.6"></p>
+
+      <div style="display:grid;gap:12px">
+        <button class="btn" id="mergeImportBtn" style="border-radius:18px;padding:16px;text-align:left">
+          <strong style="display:block;margin-bottom:4px">Merge with current data</strong>
+          <span style="font-size:12px;color:var(--muted);font-weight:500">
+            Keep your current records and add only new records from this backup.
+          </span>
+        </button>
+
+        <button class="btn danger" id="replaceImportBtn" style="border-radius:18px;padding:16px;text-align:left">
+          <strong style="display:block;margin-bottom:4px">Replace current data</strong>
+          <span style="font-size:12px;color:var(--muted);font-weight:500">
+            Remove current records and restore the backup exactly. The backup target threshold will also be restored.
+          </span>
+        </button>
+      </div>
+
+      <div class="modal-actions">
+        <button type="button" class="btn" id="cancelImportChoice">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast">Saved</div>
+
+  <script>
+    const STORAGE_KEY = "uric_acid_tracker_records_v1";
+    const TARGET_KEY = "uric_acid_tracker_target_v1";
+
+    let records = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]").map(r => ({
+      ...r,
+      source: r && r.source === "hospital" ? "hospital" : "self"
+    }));
+    let range = "30";
+    let metric = "uric";
+    let pendingImport = null;
+    let target = Number(localStorage.getItem(TARGET_KEY) || 420);
+
+    const $ = (id) => document.getElementById(id);
+    const latestValue = $("latestValue");
+    const statusPill = $("statusPill");
+    const deltaText = $("deltaText");
+    const lastDate = $("lastDate");
+    const targetDisplay = $("targetDisplay");
+    const targetInput = $("targetInput");
+    const avgStat = $("avgStat");
+    const lowStat = $("lowStat");
+    const highStat = $("highStat");
+    const countStat = $("countStat");
+    const historyList = $("historyList");
+    const chart = $("chart");
+    const emptyChart = $("emptyChart");
+    const metricSelect = $("metricSelect");
+    const modalBackdrop = $("modalBackdrop");
+    const form = $("measurementForm");
+
+    targetInput.value = target;
+    targetDisplay.textContent = target;
+
+    function localDateString(date = new Date()) {
+      const y = date.getFullYear();
+      const m = String(date.getMonth()+1).padStart(2,"0");
+      const d = String(date.getDate()).padStart(2,"0");
+      return `${y}-${m}-${d}`;
+    }
+
+    function parseRecordDate(r) {
+      const time = r.time || "12:00";
+      return new Date(`${r.date}T${time}:00`);
+    }
+
+    function formatDate(dateStr, short = false) {
+      const d = new Date(dateStr + "T12:00:00");
+      return new Intl.DateTimeFormat(undefined, short
+        ? {month:"short", day:"numeric"}
+        : {year:"numeric", month:"short", day:"numeric"}).format(d);
+    }
+
+    function sortRecords(arr) {
+      return [...arr].sort((a,b) => parseRecordDate(a) - parseRecordDate(b));
+    }
+
+    function getFilteredRecords() {
+      const sorted = sortRecords(records);
+      if (range === "all" || !sorted.length) return sorted;
+      const end = parseRecordDate(sorted[sorted.length - 1]);
+      const start = new Date(end);
+      start.setDate(start.getDate() - Number(range) + 1);
+      return sorted.filter(r => parseRecordDate(r) >= start);
+    }
+
+    function save() {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
+    }
+
+    function showToast(message) {
+      const t = $("toast");
+      t.textContent = message;
+      t.classList.add("show");
+      setTimeout(() => t.classList.remove("show"), 1600);
+    }
+
+    function openModal() {
+      $("dateInput").value = localDateString();
+      $("uricInput").value = "";
+      $("weightInput").value = "";
+      $("timeInput").value = "";
+      $("sourceInput").value = "self";
+      $("noteInput").value = "";
+      modalBackdrop.classList.add("open");
+      setTimeout(() => $("uricInput").focus(), 60);
+    }
+
+    function closeModal() {
+      modalBackdrop.classList.remove("open");
+    }
+
+    function renderSummary() {
+      const uricRecords = sortRecords(records.filter(r =>
+        r.uric !== "" && r.uric != null &&
+        Number(r.uric) > 0 && !Number.isNaN(Number(r.uric))
+      ));
+
+      countStat.textContent = records.length;
+
+      if (!uricRecords.length) {
+        latestValue.textContent = "—";
+        lastDate.textContent = "—";
+        avgStat.textContent = lowStat.textContent = highStat.textContent = "—";
+        statusPill.textContent = "No uric acid data yet";
+        statusPill.className = "pill good";
+        deltaText.textContent = "Add a uric acid measurement to begin.";
+        return;
+      }
+
+      const latest = uricRecords[uricRecords.length - 1];
+      const values = uricRecords.map(r => Number(r.uric));
+      const avg = Math.round(values.reduce((a,b) => a+b,0) / values.length);
+
+      latestValue.textContent = latest.uric;
+      lastDate.textContent = formatDate(latest.date, true);
+      avgStat.textContent = avg + " μmol/L";
+      lowStat.textContent = Math.min(...values) + " μmol/L";
+      highStat.textContent = Math.max(...values) + " μmol/L";
+
+      const latestNum = Number(latest.uric);
+      if (latestNum <= target) {
+        statusPill.textContent = "Within your target";
+        statusPill.className = "pill good";
+      } else if (latestNum <= target * 1.1) {
+        statusPill.textContent = "Above your target";
+        statusPill.className = "pill warn";
+      } else {
+        statusPill.textContent = "Well above your target";
+        statusPill.className = "pill danger";
+      }
+
+      if (uricRecords.length > 1) {
+        const prev = Number(uricRecords[uricRecords.length - 2].uric);
+        const diff = latestNum - prev;
+        if (diff === 0) deltaText.textContent = "No change from your previous uric acid reading.";
+        else deltaText.textContent = `${diff < 0 ? "↓" : "↑"} ${Math.abs(diff)} μmol/L from previous uric acid reading`;
+      } else {
+        deltaText.textContent = "This is your first uric acid reading.";
+      }
+    }
+
+    function renderHistory() {
+      const sorted = sortRecords(records).reverse();
+      historyList.innerHTML = `
+        <div class="record header">
+          <div>Date</div><div>Uric acid</div><div>Source</div><div>Weight</div><div>Note</div><div></div>
+        </div>`;
+
+      if (!sorted.length) {
+        historyList.insertAdjacentHTML("beforeend", `<div class="no-records">No measurements yet.</div>`);
+        return;
+      }
+
+      sorted.forEach(r => {
+        const row = document.createElement("div");
+        row.className = "record";
+        row.innerHTML = `
+          <div class="date">${formatDate(r.date, true)}${r.time ? ` · ${r.time}` : ""}</div>
+          <div class="ua">${r.uric !== "" && r.uric != null ? `${r.uric} μmol/L` : "—"}</div>
+          <div class="source"><span class="source-tag ${r.source === "hospital" ? "source-hospital" : "source-self"}">${r.source === "hospital" ? "Hospital" : "Self-test"}</span></div>
+          <div class="weight">${r.weight ? `${r.weight} kg` : "—"}</div>
+          <div class="note" title="${escapeHtml(r.note || "")}">${escapeHtml(r.note || "—")}</div>
+          <button class="icon-btn" aria-label="Delete measurement" title="Delete">×</button>
+        `;
+        row.querySelector("button").addEventListener("click", () => {
+          records = records.filter(x => x.id !== r.id);
+          save();
+          renderAll();
+          showToast("Measurement deleted");
+        });
+        historyList.appendChild(row);
+      });
+    }
+
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, m => ({
+        "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"
+      })[m]);
+    }
+
+    function getMetricConfig() {
+      return metric === "weight"
+        ? {
+            key: "weight",
+            label: "Weight",
+            unit: "kg",
+            emptyText: "Add measurements with weight to see the weight trend.",
+            spreadMin: 2
+          }
+        : {
+            key: "uric",
+            label: "Uric Acid",
+            unit: "μmol/L",
+            emptyText: "Your uric acid chart will appear here after you add measurements.",
+            spreadMin: 60
+          };
+    }
+
+    function getChartData() {
+      const filtered = getFilteredRecords();
+      if (metric === "weight") {
+        return filtered.filter(r =>
+          r.weight !== "" && r.weight != null &&
+          Number(r.weight) > 0 && !Number.isNaN(Number(r.weight))
+        );
+      }
+      return filtered.filter(r =>
+        r.uric !== "" && r.uric != null &&
+        Number(r.uric) > 0 && !Number.isNaN(Number(r.uric))
+      );
+    }
+
+    function renderChart() {
+      const config = getMetricConfig();
+      const data = getChartData();
+      chart.innerHTML = "";
+      chart.setAttribute("aria-label", `${config.label} trend chart`);
+      emptyChart.textContent = config.emptyText;
+      emptyChart.style.display = data.length ? "none" : "flex";
+      if (!data.length) return;
+
+      const W = 720, H = 230;
+      const pad = {l:52, r:18, t:16, b:36};
+      const values = data.map(d => Number(d[config.key]));
+      const includeTarget = metric === "uric";
+      let minY = includeTarget ? Math.min(...values, target) : Math.min(...values);
+      let maxY = includeTarget ? Math.max(...values, target) : Math.max(...values);
+
+      if (metric === "weight") {
+        const spread = Math.max(2, maxY - minY);
+        minY = Math.max(0, Math.floor((minY - spread * .25) * 10) / 10);
+        maxY = Math.ceil((maxY + spread * .25) * 10) / 10;
+      } else {
+        const spread = Math.max(60, maxY - minY);
+        minY = Math.max(0, Math.floor((minY - spread * .18) / 20) * 20);
+        maxY = Math.ceil((maxY + spread * .18) / 20) * 20;
+      }
+      if (maxY === minY) maxY += metric === "weight" ? 2 : 100;
+
+      // X axis is based on unique calendar dates, not individual measurements.
+      // This means Hospital + Self-test on the same day share one x position.
+      const uniqueDates = [...new Set(data.map(d => d.date))].sort();
+      const dateIndex = new Map(uniqueDates.map((d, i) => [d, i]));
+
+      const xForDate = (date) => {
+        const i = dateIndex.get(date);
+        return uniqueDates.length === 1
+          ? (pad.l + (W-pad.l-pad.r)/2)
+          : pad.l + i * ((W-pad.l-pad.r)/(uniqueDates.length-1));
+      };
+
+      const y = (v) => pad.t + (maxY-v) * ((H-pad.t-pad.b)/(maxY-minY));
+
+      const ns = "http://www.w3.org/2000/svg";
+      function el(name, attrs={}) {
+        const node = document.createElementNS(ns,name);
+        Object.entries(attrs).forEach(([k,v]) => node.setAttribute(k,v));
+        return node;
+      }
+
+      // Horizontal grid + Y labels
+      const gridCount = 4;
+      for (let i=0;i<=gridCount;i++) {
+        const yy = pad.t + i*(H-pad.t-pad.b)/gridCount;
+        const rawVal = maxY - i*(maxY-minY)/gridCount;
+        const val = metric === "weight" ? rawVal.toFixed(1) : Math.round(rawVal);
+        chart.appendChild(el("line",{
+          x1:pad.l,y1:yy,x2:W-pad.r,y2:yy,
+          stroke:"#eceee9","stroke-width":"1"
+        }));
+        const txt = el("text",{
+          x:pad.l-8,y:yy+4,"text-anchor":"end",
+          fill:"#929991","font-size":"10"
+        });
+        txt.textContent = val;
+        chart.appendChild(txt);
+      }
+
+      // Target line only for uric acid
+      if (includeTarget) {
+        const ty = y(target);
+        chart.appendChild(el("line",{
+          x1:pad.l,y1:ty,x2:W-pad.r,y2:ty,
+          stroke:"#9fb3a7","stroke-width":"2.6","stroke-dasharray":"7 6"
+        }));
+        const targetTxt = el("text",{
+          x:W-pad.r-2,y:ty-6,"text-anchor":"end",
+          fill:"#789083","font-size":"10"
+        });
+        targetTxt.textContent = `Target ${target}`;
+        chart.appendChild(targetTxt);
+      }
+
+      if (metric === "weight") {
+        // Weight does not use measurement source.
+        // Draw one neutral trend line across all available weight records.
+        const weightData = [...data].sort((a,b) => parseRecordDate(a) - parseRecordDate(b));
+
+        if (weightData.length > 1) {
+          const points = weightData
+            .map(d => `${xForDate(d.date)},${y(Number(d[config.key]))}`)
+            .join(" ");
+
+          chart.appendChild(el("polyline",{
+            points,
+            fill:"none",
+            stroke:"#66736b",
+            "stroke-width":"2.8",
+            "stroke-linecap":"round",
+            "stroke-linejoin":"round",
+            opacity:"0.9"
+          }));
+        }
+
+        weightData.forEach(d => {
+          const value = Number(d[config.key]);
+          const sameDay = weightData.filter(x => x.date === d.date);
+          let offset = 0;
+          if (sameDay.length > 1) {
+            const idx = sameDay.findIndex(x => x.id === d.id);
+            offset = (idx - (sameDay.length - 1) / 2) * 7;
+          }
+
+          const circle = el("circle",{
+            cx:xForDate(d.date) + offset,
+            cy:y(value),
+            r:"3.6",
+            fill:"#66736b",
+            stroke:"#66736b",
+            "stroke-width":"1"
+          });
+
+          const title = el("title");
+          title.textContent = `${formatDate(d.date)}${d.time ? " " + d.time : ""}: ${value} kg`;
+          circle.appendChild(title);
+          chart.appendChild(circle);
+        });
+      } else {
+        // Uric acid keeps two independent source series:
+        // Self-test -> Self-test only
+        // Hospital  -> Hospital only
+        const seriesDefs = [
+          {source:"self", color:"#2f6b4f", fill:"#f7fcf9"},
+          {source:"hospital", color:"#b44d4d", fill:"#fff7f7"}
+        ];
+
+        seriesDefs.forEach(series => {
+          const seriesData = data
+            .filter(d => (d.source === "hospital" ? "hospital" : "self") === series.source)
+            .sort((a,b) => parseRecordDate(a) - parseRecordDate(b));
+
+          if (seriesData.length > 1) {
+            const points = seriesData
+              .map(d => `${xForDate(d.date)},${y(Number(d[config.key]))}`)
+              .join(" ");
+
+            chart.appendChild(el("polyline",{
+              points,
+              fill:"none",
+              stroke:series.color,
+              "stroke-width":"2.6",
+              "stroke-linecap":"round",
+              "stroke-linejoin":"round",
+              opacity:"0.82"
+            }));
+          }
+
+          seriesData.forEach(d => {
+            const value = Number(d[config.key]);
+            const cx = xForDate(d.date);
+            const cy = y(value);
+
+            const sameDaySameSource = seriesData.filter(x => x.date === d.date);
+            let offset = 0;
+            if (sameDaySameSource.length > 1) {
+              const idx = sameDaySameSource.findIndex(x => x.id === d.id);
+              offset = (idx - (sameDaySameSource.length - 1) / 2) * 7;
+            }
+
+            const circle = el("circle",{
+              cx:cx + offset,
+              cy,
+              r:"3.8",
+              fill:series.color,
+              stroke:series.color,
+              "stroke-width":"1"
+            });
+
+            const title = el("title");
+            const sourceLabel = series.source === "hospital" ? "Hospital" : "Self-test";
+            title.textContent = `${formatDate(d.date)}${d.time ? " " + d.time : ""}: ${value} μmol/L · ${sourceLabel}`;
+            circle.appendChild(title);
+            chart.appendChild(circle);
+          });
+        });
+      }
+
+      // X-axis labels are drawn once per unique date.
+      const labelIndexes = uniqueDates.length <= 5
+        ? uniqueDates.map((_,i)=>i)
+        : [0, Math.floor((uniqueDates.length-1)/2), uniqueDates.length-1];
+
+      [...new Set(labelIndexes)].forEach(i => {
+        const date = uniqueDates[i];
+        const txt = el("text",{
+          x:xForDate(date),
+          y:H-10,
+          "text-anchor":i===0 ? "start" : (i===uniqueDates.length-1 ? "end" : "middle"),
+          fill:"#8f968f",
+          "font-size":"10"
+        });
+        txt.textContent = formatDate(date,true);
+        chart.appendChild(txt);
+      });
+    }
+
+    function renderAll() {
+      renderSummary();
+      renderHistory();
+      const legend = document.querySelector(".chart-legend");
+      if (legend) legend.style.display = metric === "weight" ? "none" : "flex";
+      renderChart();
+    }
+
+    form.addEventListener("submit", (e) => {
+      e.preventDefault();
+
+      const uricRaw = $("uricInput").value.trim();
+      const weightRaw = $("weightInput").value.trim();
+
+      if (!uricRaw && !weightRaw) {
+        alert("Please enter at least a uric acid value or a weight.");
+        return;
+      }
+
+      records.push({
+        id: (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString()),
+        date: $("dateInput").value,
+        uric: uricRaw ? Number(uricRaw) : "",
+        weight: weightRaw ? Number(weightRaw) : "",
+        time: $("timeInput").value,
+        source: $("sourceInput").value === "hospital" ? "hospital" : "self",
+        note: $("noteInput").value.trim()
+      });
+      save();
+      closeModal();
+      renderAll();
+      showToast("Measurement saved");
+    });
+
+    $("addBtn").addEventListener("click", openModal);
+    $("closeModal").addEventListener("click", closeModal);
+    $("cancelBtn").addEventListener("click", closeModal);
+    modalBackdrop.addEventListener("click", e => {
+      if (e.target === modalBackdrop) closeModal();
+    });
+    document.addEventListener("keydown", e => {
+      if (e.key === "Escape") closeModal();
+    });
+
+    document.querySelectorAll(".segmented button").forEach(btn => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll(".segmented button").forEach(b=>b.classList.remove("active"));
+        btn.classList.add("active");
+        range = btn.dataset.range;
+        renderChart();
+      });
+    });
+
+    metricSelect.addEventListener("change", () => {
+      metric = metricSelect.value;
+      const legend = document.querySelector(".chart-legend");
+      if (legend) legend.style.display = metric === "weight" ? "none" : "flex";
+      renderChart();
+    });
+
+    targetInput.addEventListener("change", () => {
+      const v = Number(targetInput.value);
+      if (!v || v < 1) {
+        targetInput.value = target;
+        return;
+      }
+      target = v;
+      localStorage.setItem(TARGET_KEY, String(target));
+      targetDisplay.textContent = target;
+      renderAll();
+      showToast("Target updated");
+    });
+
+
+    $("clearBtn").addEventListener("click", () => {
+      if (!records.length) {
+        showToast("No records to clear");
+        return;
+      }
+
+      const ok = confirm(
+        `Clear all ${records.length} measurement record${records.length === 1 ? "" : "s"}?\n\n` +
+        "Your target threshold will be kept. This cannot be undone unless you have a backup."
+      );
+      if (!ok) return;
+
+      records = [];
+      save();
+      renderAll();
+      showToast("All records cleared");
+    });
+
+    $("backupBtn").addEventListener("click", () => {
+      const backup = {
+        app: "Uric Acid Tracker",
+        version: 2,
+        exportedAt: new Date().toISOString(),
+        target: target,
+        records: sortRecords(records)
+      };
+      const blob = new Blob([JSON.stringify(backup, null, 2)], {type:"application/json;charset=utf-8;"});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `uric-acid-backup-${localDateString()}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      showToast("Backup file created");
+    });
+
+    $("importBackupBtn").addEventListener("click", () => {
+      $("backupFileInput").value = "";
+      $("backupFileInput").click();
+    });
+
+    function closeImportChoice() {
+      $("importChoiceBackdrop").classList.remove("open");
+      pendingImport = null;
+    }
+
+    function applyBackupTarget(backupTarget) {
+      if (Number(backupTarget) > 0) {
+        target = Number(backupTarget);
+        localStorage.setItem(TARGET_KEY, String(target));
+        targetInput.value = target;
+        targetDisplay.textContent = target;
+      }
+    }
+
+    function mergePendingImport() {
+      if (!pendingImport) return;
+      const imported = pendingImport.records;
+
+      const existingIds = new Set(records.map(r => r.id));
+      const existingSignatures = new Set(records.map(r =>
+        `${r.date}|${r.time || ""}|${r.uric === "" || r.uric == null ? "" : Number(r.uric)}|${r.source || "self"}|${r.weight || ""}|${r.note || ""}`
+      ));
+
+      let added = 0;
+      for (const r of imported) {
+        const signature = `${r.date}|${r.time || ""}|${r.uric === "" || r.uric == null ? "" : Number(r.uric)}|${r.source || "self"}|${r.weight || ""}|${r.note || ""}`;
+        if (!existingIds.has(r.id) && !existingSignatures.has(signature)) {
+          records.push(r);
+          existingIds.add(r.id);
+          existingSignatures.add(signature);
+          added++;
+        }
+      }
+
+      save();
+      $("importChoiceBackdrop").classList.remove("open");
+      pendingImport = null;
+      renderAll();
+      showToast(added
+        ? `Merged ${added} new record${added === 1 ? "" : "s"}`
+        : "No new records found");
+    }
+
+    function replaceWithPendingImport() {
+      if (!pendingImport) return;
+
+      records = pendingImport.records;
+      applyBackupTarget(pendingImport.target);
+      const count = records.length;
+
+      save();
+      $("importChoiceBackdrop").classList.remove("open");
+      pendingImport = null;
+      renderAll();
+      showToast(`Restored ${count} record${count === 1 ? "" : "s"}`);
+    }
+
+    $("backupFileInput").addEventListener("change", async (e) => {
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+
+      try {
+        const rawText = await file.text();
+        const backup = JSON.parse(rawText);
+
+        if (!backup || !Array.isArray(backup.records)) {
+          throw new Error("Invalid backup format");
+        }
+
+        const imported = backup.records
+          .filter(r => r && r.date && (
+            (r.uric !== "" && r.uric != null && Number(r.uric) > 0) ||
+            (r.weight !== "" && r.weight != null && Number(r.weight) > 0)
+          ))
+          .map(r => ({
+            id: r.id || (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`),
+            date: String(r.date),
+            uric: r.uric === "" || r.uric == null ? "" : Number(r.uric),
+            weight: r.weight === "" || r.weight == null ? "" : Number(r.weight),
+            time: r.time ? String(r.time) : "",
+            source: r.source === "hospital" ? "hospital" : "self",
+            note: r.note ? String(r.note) : ""
+          }));
+
+        pendingImport = {
+          records: imported,
+          target: Number(backup.target) > 0 ? Number(backup.target) : null,
+          fileName: file.name
+        };
+
+        $("importChoiceSummary").innerHTML =
+          `<strong>${escapeHtml(file.name)}</strong><br>` +
+          `${imported.length} record${imported.length === 1 ? "" : "s"} found in backup · ` +
+          `${records.length} record${records.length === 1 ? "" : "s"} currently on this device.`;
+
+        $("importChoiceBackdrop").classList.add("open");
+      } catch (err) {
+        pendingImport = null;
+        alert("This file could not be imported. Please choose a backup JSON file created by this Uric Acid Tracker.");
+      }
+    });
+
+    $("mergeImportBtn").addEventListener("click", mergePendingImport);
+
+    $("replaceImportBtn").addEventListener("click", () => {
+      if (!pendingImport) return;
+
+      const ok = confirm(
+        `Replace your current ${records.length} record${records.length === 1 ? "" : "s"} ` +
+        `with ${pendingImport.records.length} record${pendingImport.records.length === 1 ? "" : "s"} from this backup?`
+      );
+      if (ok) replaceWithPendingImport();
+    });
+
+    $("closeImportChoice").addEventListener("click", closeImportChoice);
+    $("cancelImportChoice").addEventListener("click", closeImportChoice);
+    $("importChoiceBackdrop").addEventListener("click", e => {
+      if (e.target === $("importChoiceBackdrop")) closeImportChoice();
+    });
+
+    $("exportBtn").addEventListener("click", () => {
+      if (!records.length) {
+        showToast("No data to export");
+        return;
+      }
+      const rows = [["Date","Time","Uric acid (umol/L)","Source","Weight (kg)","Notes"]];
+      sortRecords(records).forEach(r => rows.push([r.date,r.time || "",r.uric,r.source === "hospital" ? "Hospital" : "Self-test",r.weight || "",r.note || ""]));
+      const csv = rows.map(row => row.map(v => `"${String(v).replace(/"/g,'""')}"`).join(",")).join("\n");
+      const blob = new Blob(["\ufeff"+csv], {type:"text/csv;charset=utf-8;"});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `uric-acid-records-${localDateString()}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      showToast("CSV exported");
+    });
+
+    renderAll();
+  </script>
+</body>
+</html>
