@@ -148,7 +148,14 @@
     }
     .modal-backdrop.open{display:flex}
     .modal{
-      width:min(540px,100%);background:#fff;border-radius:26px;box-shadow:0 30px 90px rgba(0,0,0,.18);padding:24px
+      width:min(540px,100%);max-height:calc(100dvh - 28px);background:#fff;border-radius:26px;
+      box-shadow:0 30px 90px rgba(0,0,0,.18);padding:24px;display:flex;flex-direction:column;overflow:hidden
+    }
+    #measurementForm{display:flex;flex-direction:column;min-height:0;flex:1}
+    #measurementForm .form-grid{overflow-y:auto;overscroll-behavior:contain;padding-right:2px}
+    #measurementForm .modal-actions{
+      position:sticky;bottom:0;background:#fff;border-top:1px solid var(--line);
+      padding-top:14px;padding-bottom:2px;margin-top:10px;flex-shrink:0
     }
     .modal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px}
     .modal h2{margin:0;font-size:21px}
@@ -186,6 +193,15 @@
       .record .date::before{content:"Date · ";color:var(--muted);font-weight:500}
       .form-grid{grid-template-columns:1fr}
       .field.full{grid-column:auto}
+      .modal-backdrop{align-items:flex-end;padding:0}
+      .modal{
+        width:100%;max-height:92dvh;border-radius:24px 24px 0 0;
+        padding:18px 18px max(14px, env(safe-area-inset-bottom))
+      }
+      .modal-head{margin-bottom:14px}
+      #measurementForm .form-grid{padding-bottom:8px}
+      #measurementForm .modal-actions{display:grid;grid-template-columns:auto 1fr;gap:10px}
+      #measurementForm .modal-actions .btn.primary{width:100%;padding:13px 16px}
     }
   </style>
 </head>
@@ -308,6 +324,20 @@
             </div>
           </div>
         </div>
+        <div class="target-box" style="margin-top:14px">
+          <div class="target-row">
+            <div>
+              <div style="font-size:13px;font-weight:700">Automatic JSON backup</div>
+              <div id="autoBackupStatus" style="font-size:11px;color:var(--muted);margin-top:4px;line-height:1.4">
+                Checking browser support…
+              </div>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">
+              <button class="btn" id="autoBackupBtn" type="button" style="padding:9px 12px;white-space:nowrap">Set up</button>
+              <button class="btn danger" id="disconnectBackupBtn" type="button" style="padding:9px 12px;white-space:nowrap;display:none">Disconnect</button>
+            </div>
+          </div>
+        </div>
         <div class="privacy"><strong>Private by default.</strong><br>Your measurements are stored only in this browser using local storage. Use <strong>Backup data</strong> to move your complete history to another device. After you select a backup file, you can choose <strong>Merge</strong> to keep current records or <strong>Replace</strong> to restore only the backup file.</div>
         <div class="disclaimer">This tracker is for personal record-keeping and does not diagnose or interpret a medical condition. Use the target recommended for you by your clinician or laboratory.</div>
       </aside>
@@ -340,10 +370,6 @@
           <div class="field">
             <label for="weightInput">Weight (kg) · optional</label>
             <input id="weightInput" type="number" min="1" step="0.1" placeholder="e.g. 62.1" />
-          </div>
-          <div class="field">
-            <label for="timeInput">Time · optional</label>
-            <input id="timeInput" type="time" />
           </div>
           <div class="field full">
             <label for="noteInput">Notes · optional</label>
@@ -395,6 +421,9 @@
   <script>
     const STORAGE_KEY = "uric_acid_tracker_records_v1";
     const TARGET_KEY = "uric_acid_tracker_target_v1";
+    const AUTO_BACKUP_DB = "uric_acid_tracker_backup_db_v1";
+    const AUTO_BACKUP_STORE = "handles";
+    const AUTO_BACKUP_HANDLE_KEY = "jsonBackupHandle";
 
     let records = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]").map(r => ({
       ...r,
@@ -403,6 +432,7 @@
     let range = "30";
     let metric = "uric";
     let pendingImport = null;
+    let autoBackupHandle = null;
     let target = Number(localStorage.getItem(TARGET_KEY) || 420);
 
     const $ = (id) => document.getElementById(id);
@@ -434,8 +464,7 @@
     }
 
     function parseRecordDate(r) {
-      const time = r.time || "12:00";
-      return new Date(`${r.date}T${time}:00`);
+      return new Date(`${r.date}T12:00:00`);
     }
 
     function formatDate(dateStr, short = false) {
@@ -458,8 +487,191 @@
       return sorted.filter(r => parseRecordDate(r) >= start);
     }
 
+    function buildBackupPayload() {
+      return {
+        app: "Uric Acid Tracker",
+        version: 3,
+        exportedAt: new Date().toISOString(),
+        target: target,
+        records: sortRecords(records).map(r => ({
+          id: r.id,
+          date: r.date,
+          uric: r.uric,
+          weight: r.weight,
+          source: r.uric !== "" && r.uric != null
+            ? (r.source === "hospital" ? "hospital" : "self")
+            : "",
+          note: r.note || ""
+        }))
+      };
+    }
+
+    function openAutoBackupDB() {
+      return new Promise((resolve, reject) => {
+        const req = indexedDB.open(AUTO_BACKUP_DB, 1);
+        req.onupgradeneeded = () => {
+          const db = req.result;
+          if (!db.objectStoreNames.contains(AUTO_BACKUP_STORE)) {
+            db.createObjectStore(AUTO_BACKUP_STORE);
+          }
+        };
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
+    }
+
+    async function saveAutoBackupHandle(handle) {
+      const db = await openAutoBackupDB();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(AUTO_BACKUP_STORE, "readwrite");
+        tx.objectStore(AUTO_BACKUP_STORE).put(handle, AUTO_BACKUP_HANDLE_KEY);
+        tx.oncomplete = () => { db.close(); resolve(); };
+        tx.onerror = () => { db.close(); reject(tx.error); };
+      });
+    }
+
+    async function deleteAutoBackupHandle() {
+      const db = await openAutoBackupDB();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(AUTO_BACKUP_STORE, "readwrite");
+        tx.objectStore(AUTO_BACKUP_STORE).delete(AUTO_BACKUP_HANDLE_KEY);
+        tx.oncomplete = () => { db.close(); resolve(); };
+        tx.onerror = () => { db.close(); reject(tx.error); };
+      });
+    }
+
+    async function loadAutoBackupHandle() {
+      const db = await openAutoBackupDB();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(AUTO_BACKUP_STORE, "readonly");
+        const req = tx.objectStore(AUTO_BACKUP_STORE).get(AUTO_BACKUP_HANDLE_KEY);
+        req.onsuccess = () => resolve(req.result || null);
+        req.onerror = () => reject(req.error);
+        tx.oncomplete = () => db.close();
+      });
+    }
+
+    function setAutoBackupStatus(message, active=false) {
+      const status = $("autoBackupStatus");
+      const btn = $("autoBackupBtn");
+      const disconnectBtn = $("disconnectBackupBtn");
+      if (!status || !btn) return;
+
+      status.textContent = message;
+      status.style.color = active ? "var(--accent)" : "var(--muted)";
+      btn.textContent = autoBackupHandle ? "Change file" : "Set up";
+
+      if (disconnectBtn) {
+        disconnectBtn.style.display = autoBackupHandle ? "inline-flex" : "none";
+      }
+    }
+
+    async function writeAutoBackupFile(showFeedback=false) {
+      if (!autoBackupHandle) return false;
+      try {
+        if (autoBackupHandle.queryPermission) {
+          const permission = await autoBackupHandle.queryPermission({mode:"readwrite"});
+          if (permission !== "granted") {
+            setAutoBackupStatus("Tap Set up to resume automatic file backup.");
+            return false;
+          }
+        }
+
+        const writable = await autoBackupHandle.createWritable();
+        await writable.write(JSON.stringify(buildBackupPayload(), null, 2));
+        await writable.close();
+
+        setAutoBackupStatus("On · latest backup updated", true);
+        if (showFeedback) showToast("Automatic backup updated");
+        return true;
+      } catch (err) {
+        setAutoBackupStatus("Automatic file backup needs attention.");
+        return false;
+      }
+    }
+
+    async function setupAutoBackup() {
+      if (!("showSaveFilePicker" in window)) {
+        alert(
+          "This browser does not allow a webpage to keep overwriting the same local JSON file automatically. " +
+          "Your data is still saved immediately in this browser, and you can use Backup data whenever you want a portable JSON copy."
+        );
+        setAutoBackupStatus("Same-file automatic backup is not available in this browser.");
+        return;
+      }
+
+      try {
+        // Always open the file picker when the user taps Set up / Change file.
+        // This allows switching to a different backup file at any time.
+        const handle = await window.showSaveFilePicker({
+          suggestedName: "uric-acid-auto-backup.json",
+          types: [{
+            description: "JSON backup",
+            accept: {"application/json": [".json"]}
+          }]
+        });
+
+        autoBackupHandle = handle;
+        await saveAutoBackupHandle(handle);
+        await writeAutoBackupFile(true);
+      } catch (err) {
+        if (err && err.name === "AbortError") return;
+        setAutoBackupStatus("Automatic backup could not be enabled.");
+      }
+    }
+
+    async function disconnectAutoBackup() {
+      if (!autoBackupHandle) return;
+
+      const ok = confirm(
+        "Disconnect automatic JSON backup?\n\n" +
+        "Your measurements will stay in this browser. The existing JSON file will not be deleted."
+      );
+      if (!ok) return;
+
+      try {
+        await deleteAutoBackupHandle();
+      } catch (err) {
+        // Even if IndexedDB cleanup fails, stop using the handle in this session.
+      }
+
+      autoBackupHandle = null;
+      setAutoBackupStatus("Off · no automatic backup file connected.");
+      showToast("Automatic backup disconnected");
+    }
+
+    async function initAutoBackup() {
+      if (!("showSaveFilePicker" in window)) {
+        setAutoBackupStatus("Portable auto-backup is not supported by this browser.");
+        return;
+      }
+
+      try {
+        autoBackupHandle = await loadAutoBackupHandle();
+        if (!autoBackupHandle) {
+          setAutoBackupStatus("Optional · choose one JSON file to keep updated automatically.");
+          return;
+        }
+
+        const permission = autoBackupHandle.queryPermission
+          ? await autoBackupHandle.queryPermission({mode:"readwrite"})
+          : "prompt";
+
+        if (permission === "granted") {
+          setAutoBackupStatus("On · backup file connected", true);
+        } else {
+          setAutoBackupStatus("Backup file remembered · tap Change file to choose another file.");
+        }
+      } catch (err) {
+        setAutoBackupStatus("Optional · choose one JSON file to keep updated automatically.");
+      }
+    }
+
     function save() {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
+      // File backup runs in addition to browser storage. If unsupported or not configured,
+      // this quietly does nothing and the normal local save still succeeds.
+      writeAutoBackupFile(false);
     }
 
     function showToast(message) {
@@ -473,7 +685,6 @@
       $("dateInput").value = localDateString();
       $("uricInput").value = "";
       $("weightInput").value = "";
-      $("timeInput").value = "";
       $("sourceInput").value = "self";
       $("noteInput").value = "";
       modalBackdrop.classList.add("open");
@@ -550,9 +761,13 @@
         const row = document.createElement("div");
         row.className = "record";
         row.innerHTML = `
-          <div class="date">${formatDate(r.date, true)}${r.time ? ` · ${r.time}` : ""}</div>
+          <div class="date">${formatDate(r.date, true)}</div>
           <div class="ua">${r.uric !== "" && r.uric != null ? `${r.uric} μmol/L` : "—"}</div>
-          <div class="source"><span class="source-tag ${r.source === "hospital" ? "source-hospital" : "source-self"}">${r.source === "hospital" ? "Hospital" : "Self-test"}</span></div>
+          <div class="source">${
+            r.uric !== "" && r.uric != null
+              ? `<span class="source-tag ${r.source === "hospital" ? "source-hospital" : "source-self"}">${r.source === "hospital" ? "Hospital" : "Self-test"}</span>`
+              : "—"
+          }</div>
           <div class="weight">${r.weight ? `${r.weight} kg` : "—"}</div>
           <div class="note" title="${escapeHtml(r.note || "")}">${escapeHtml(r.note || "—")}</div>
           <button class="icon-btn" aria-label="Delete measurement" title="Delete">×</button>
@@ -726,7 +941,7 @@
           });
 
           const title = el("title");
-          title.textContent = `${formatDate(d.date)}${d.time ? " " + d.time : ""}: ${value} kg`;
+          title.textContent = `${formatDate(d.date)}: ${value} kg`;
           circle.appendChild(title);
           chart.appendChild(circle);
         });
@@ -783,7 +998,7 @@
 
             const title = el("title");
             const sourceLabel = series.source === "hospital" ? "Hospital" : "Self-test";
-            title.textContent = `${formatDate(d.date)}${d.time ? " " + d.time : ""}: ${value} μmol/L · ${sourceLabel}`;
+            title.textContent = `${formatDate(d.date)}: ${value} μmol/L · ${sourceLabel}`;
             circle.appendChild(title);
             chart.appendChild(circle);
           });
@@ -833,8 +1048,7 @@
         date: $("dateInput").value,
         uric: uricRaw ? Number(uricRaw) : "",
         weight: weightRaw ? Number(weightRaw) : "",
-        time: $("timeInput").value,
-        source: $("sourceInput").value === "hospital" ? "hospital" : "self",
+        source: uricRaw ? ($("sourceInput").value === "hospital" ? "hospital" : "self") : "",
         note: $("noteInput").value.trim()
       });
       save();
@@ -842,6 +1056,9 @@
       renderAll();
       showToast("Measurement saved");
     });
+
+    $("autoBackupBtn").addEventListener("click", setupAutoBackup);
+    $("disconnectBackupBtn").addEventListener("click", disconnectAutoBackup);
 
     $("addBtn").addEventListener("click", openModal);
     $("closeModal").addEventListener("click", closeModal);
@@ -878,6 +1095,7 @@
       target = v;
       localStorage.setItem(TARGET_KEY, String(target));
       targetDisplay.textContent = target;
+      writeAutoBackupFile(false);
       renderAll();
       showToast("Target updated");
     });
@@ -902,13 +1120,7 @@
     });
 
     $("backupBtn").addEventListener("click", () => {
-      const backup = {
-        app: "Uric Acid Tracker",
-        version: 2,
-        exportedAt: new Date().toISOString(),
-        target: target,
-        records: sortRecords(records)
-      };
+      const backup = buildBackupPayload();
       const blob = new Blob([JSON.stringify(backup, null, 2)], {type:"application/json;charset=utf-8;"});
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -946,12 +1158,12 @@
 
       const existingIds = new Set(records.map(r => r.id));
       const existingSignatures = new Set(records.map(r =>
-        `${r.date}|${r.time || ""}|${r.uric === "" || r.uric == null ? "" : Number(r.uric)}|${r.source || "self"}|${r.weight || ""}|${r.note || ""}`
+        `${r.date}|${r.uric === "" || r.uric == null ? "" : Number(r.uric)}|${r.source || ""}|${r.weight || ""}|${r.note || ""}`
       ));
 
       let added = 0;
       for (const r of imported) {
-        const signature = `${r.date}|${r.time || ""}|${r.uric === "" || r.uric == null ? "" : Number(r.uric)}|${r.source || "self"}|${r.weight || ""}|${r.note || ""}`;
+        const signature = `${r.date}|${r.uric === "" || r.uric == null ? "" : Number(r.uric)}|${r.source || ""}|${r.weight || ""}|${r.note || ""}`;
         if (!existingIds.has(r.id) && !existingSignatures.has(signature)) {
           records.push(r);
           existingIds.add(r.id);
@@ -1005,8 +1217,7 @@
             date: String(r.date),
             uric: r.uric === "" || r.uric == null ? "" : Number(r.uric),
             weight: r.weight === "" || r.weight == null ? "" : Number(r.weight),
-            time: r.time ? String(r.time) : "",
-            source: r.source === "hospital" ? "hospital" : "self",
+                source: (r.uric !== "" && r.uric != null) ? (r.source === "hospital" ? "hospital" : "self") : "",
             note: r.note ? String(r.note) : ""
           }));
 
@@ -1051,8 +1262,16 @@
         showToast("No data to export");
         return;
       }
-      const rows = [["Date","Time","Uric acid (umol/L)","Source","Weight (kg)","Notes"]];
-      sortRecords(records).forEach(r => rows.push([r.date,r.time || "",r.uric,r.source === "hospital" ? "Hospital" : "Self-test",r.weight || "",r.note || ""]));
+      const rows = [["Date","Uric acid (umol/L)","Source","Weight (kg)","Notes"]];
+      sortRecords(records).forEach(r => rows.push([
+        r.date,
+        r.uric,
+        r.uric !== "" && r.uric != null
+          ? (r.source === "hospital" ? "Hospital" : "Self-test")
+          : "",
+        r.weight || "",
+        r.note || ""
+      ]));
       const csv = rows.map(row => row.map(v => `"${String(v).replace(/"/g,'""')}"`).join(",")).join("\n");
       const blob = new Blob(["\ufeff"+csv], {type:"text/csv;charset=utf-8;"});
       const url = URL.createObjectURL(blob);
@@ -1067,6 +1286,7 @@
     });
 
     renderAll();
+    initAutoBackup();
   </script>
 </body>
 </html>
