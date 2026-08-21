@@ -235,6 +235,17 @@
       .backup-reminder{align-items:flex-start;flex-direction:column}
       .backup-reminder .btn{width:100%}
     }
+
+
+    /* Cloud sync */
+    .cloud-actions{margin-top:10px}
+    .cloud-actions .btn:disabled{opacity:.5;cursor:not-allowed}
+    .cloud-account{font-size:12px;color:var(--muted);margin-top:3px;word-break:break-all}
+    .auth-note{margin:0 0 14px;color:var(--muted);font-size:13px;line-height:1.55}
+    .auth-status{min-height:20px;margin:10px 0 0;font-size:13px;color:var(--muted)}
+    .auth-status.error{color:var(--danger)}
+    .auth-status.ok{color:var(--accent)}
+
   </style>
 </head>
 <body>
@@ -385,6 +396,20 @@
           </div>
 
           <div class="safety-row">
+            <div class="safety-icon warn" id="cloudSyncIcon">☁</div>
+            <div>
+              <div class="safety-label">Cloud sync</div>
+              <div class="safety-detail" id="cloudSyncStatus">Not signed in</div>
+              <div class="cloud-account" id="cloudAccount"></div>
+            </div>
+          </div>
+
+          <div class="safety-actions cloud-actions">
+            <button class="btn" id="cloudAuthBtn" type="button">Sign in</button>
+            <button class="btn" id="cloudSyncBtn" type="button" disabled>Sync now</button>
+          </div>
+
+          <div class="safety-row">
             <div class="safety-icon warn" id="externalBackupIcon">⚠</div>
             <div>
               <div class="safety-label">External backup</div>
@@ -397,7 +422,7 @@
             <button class="btn" id="importBackupBtn" type="button">Restore backup</button>
           </div>
         </div>
-        <div class="privacy"><strong>Private by default.</strong><br>Your measurements are saved automatically in this browser, with a second internal browser backup. Use <strong>Backup to Files</strong> for a portable JSON copy you can keep in Files or iCloud Drive.</div>
+        <div class="privacy"><strong>Private by default.</strong><br>Your measurements are saved automatically in this browser, with a second internal browser backup. When you sign in, the same data is also synced to your private Supabase account so it can appear on your other devices. Use <strong>Backup to Files</strong> for an additional portable JSON copy.</div>
         <div class="disclaimer">This tracker is for personal record-keeping and does not diagnose or interpret a medical condition. Use the target recommended for you by your clinician or laboratory.</div>
       </aside>
     </section>
@@ -475,8 +500,34 @@
     </div>
   </div>
 
+  <div class="modal-backdrop" id="cloudAuthBackdrop">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="cloudAuthTitle">
+      <div class="modal-head">
+        <h2 id="cloudAuthTitle">Cloud sync</h2>
+        <button class="close" id="closeCloudAuth" aria-label="Close">×</button>
+      </div>
+      <p class="auth-note">Sign in with the same email and password on another device to load the same uric-acid records.</p>
+      <div class="form-grid">
+        <div class="field full">
+          <label for="cloudEmail">Email</label>
+          <input id="cloudEmail" type="email" autocomplete="email" placeholder="you@example.com" />
+        </div>
+        <div class="field full">
+          <label for="cloudPassword">Password</label>
+          <input id="cloudPassword" type="password" minlength="6" autocomplete="current-password" placeholder="At least 6 characters" />
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn" id="cloudCreateBtn">Create account</button>
+        <button type="button" class="btn primary" id="cloudSignInBtn">Sign in</button>
+      </div>
+      <p class="auth-status" id="cloudAuthStatus"></p>
+    </div>
+  </div>
+
   <div class="toast" id="toast">Saved</div>
 
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script>
     const STORAGE_KEY = "uric_acid_tracker_records_v1";
     const TARGET_KEY = "uric_acid_tracker_target_v1";
@@ -486,6 +537,25 @@
     const LAST_EXTERNAL_BACKUP_KEY = "uric_acid_tracker_last_external_backup_v1";
     const LAST_EXTERNAL_COUNT_KEY = "uric_acid_tracker_last_external_count_v1";
     const FIRST_DATA_SAVED_KEY = "uric_acid_tracker_first_data_saved_v1";
+
+    const SUPABASE_URL = "https://cjgcxgsfxrhgtanqunse.supabase.co";
+    const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_x_PHAwjTGiltuAiAr8-U6w_vtt5xGuc";
+    const CLOUD_TABLE = "uric_acid_sync";
+    const CLOUD_DIRTY_KEY = "uric_acid_tracker_cloud_dirty_v1";
+    const CLOUD_LINKED_USER_KEY = "uric_acid_tracker_cloud_user_v1";
+    let cloudClient = null;
+    let cloudUser = null;
+    let cloudSyncTimer = null;
+
+    try {
+      if (window.supabase && window.supabase.createClient) {
+        cloudClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+          auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
+        });
+      }
+    } catch (err) {
+      console.error("Supabase initialization failed:", err);
+    }
 
     let records = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]").map(r => ({
       ...r,
@@ -750,8 +820,9 @@
       updateDataSafety();
     }
 
-    function save() {
+    function persistLocalSnapshot() {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
+      localStorage.setItem(TARGET_KEY, String(target));
 
       if (records.length > 0 && !localStorage.getItem(FIRST_DATA_SAVED_KEY)) {
         localStorage.setItem(FIRST_DATA_SAVED_KEY, String(Date.now()));
@@ -759,6 +830,206 @@
 
       writeInternalBackup();
       updateDataSafety();
+    }
+
+    function save() {
+      persistLocalSnapshot();
+      markCloudDirtyAndSync();
+    }
+
+    function setCloudUI(state, detail = "") {
+      const icon = $("cloudSyncIcon");
+      const status = $("cloudSyncStatus");
+      const account = $("cloudAccount");
+      const authBtn = $("cloudAuthBtn");
+      const syncBtn = $("cloudSyncBtn");
+
+      if (!icon || !status || !authBtn || !syncBtn) return;
+
+      if (state === "signed-out") {
+        icon.textContent = "☁";
+        icon.className = "safety-icon warn";
+        status.textContent = detail || "Not signed in";
+        account.textContent = "";
+        authBtn.textContent = "Sign in";
+        syncBtn.disabled = true;
+      } else if (state === "syncing") {
+        icon.textContent = "↻";
+        icon.className = "safety-icon warn";
+        status.textContent = detail || "Syncing…";
+        account.textContent = cloudUser?.email || "";
+        authBtn.textContent = "Sign out";
+        syncBtn.disabled = true;
+      } else if (state === "error") {
+        icon.textContent = "⚠";
+        icon.className = "safety-icon warn";
+        status.textContent = detail || "Cloud sync needs attention";
+        account.textContent = cloudUser?.email || "";
+        authBtn.textContent = cloudUser ? "Sign out" : "Sign in";
+        syncBtn.disabled = !cloudUser;
+      } else {
+        icon.textContent = "✓";
+        icon.className = "safety-icon ok";
+        status.textContent = detail || "Up to date";
+        account.textContent = cloudUser?.email || "";
+        authBtn.textContent = "Sign out";
+        syncBtn.disabled = false;
+      }
+    }
+
+    function normalizeCloudRecords(arr) {
+      if (!Array.isArray(arr)) return [];
+      return arr
+        .filter(r => r && r.date && (
+          (r.uric !== "" && r.uric != null && Number(r.uric) > 0) ||
+          (r.weight !== "" && r.weight != null && Number(r.weight) > 0)
+        ))
+        .map(r => ({
+          id: r.id || (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`),
+          date: String(r.date),
+          uric: r.uric === "" || r.uric == null ? "" : Number(r.uric),
+          weight: r.weight === "" || r.weight == null ? "" : Number(r.weight),
+          source: (r.uric !== "" && r.uric != null) ? (r.source === "hospital" ? "hospital" : "self") : "",
+          note: r.note ? String(r.note) : ""
+        }));
+    }
+
+    function mergeRecordSets(cloudRecords, localRecords) {
+      const merged = [];
+      const ids = new Set();
+      const signatures = new Set();
+      const add = (r) => {
+        const signature = `${r.date}|${r.uric === "" || r.uric == null ? "" : Number(r.uric)}|${r.source || ""}|${r.weight || ""}|${r.note || ""}`;
+        if (ids.has(r.id) || signatures.has(signature)) return;
+        merged.push(r);
+        ids.add(r.id);
+        signatures.add(signature);
+      };
+      normalizeCloudRecords(cloudRecords).forEach(add);
+      normalizeCloudRecords(localRecords).forEach(add);
+      return sortRecords(merged);
+    }
+
+    function markCloudDirtyAndSync(delay = 450) {
+      localStorage.setItem(CLOUD_DIRTY_KEY, "1");
+      if (!cloudUser || !cloudClient) return;
+      clearTimeout(cloudSyncTimer);
+      cloudSyncTimer = setTimeout(() => uploadCloudSnapshot(), delay);
+    }
+
+    async function uploadCloudSnapshot() {
+      if (!cloudClient || !cloudUser) return false;
+      setCloudUI("syncing", "Uploading changes…");
+
+      const payload = {
+        user_id: cloudUser.id,
+        records: sortRecords(records),
+        target: target,
+        updated_at: new Date().toISOString()
+      };
+
+      const { error } = await cloudClient
+        .from(CLOUD_TABLE)
+        .upsert(payload, { onConflict: "user_id" });
+
+      if (error) {
+        console.error("Cloud upload failed:", error);
+        setCloudUI("error", "Sync failed — local copy is safe");
+        return false;
+      }
+
+      localStorage.setItem(CLOUD_DIRTY_KEY, "0");
+      localStorage.setItem(CLOUD_LINKED_USER_KEY, cloudUser.id);
+      setCloudUI("ready", `Up to date · ${new Date().toLocaleTimeString([], {hour:"2-digit", minute:"2-digit"})}`);
+      return true;
+    }
+
+    async function reconcileCloud() {
+      if (!cloudClient || !cloudUser) return;
+      setCloudUI("syncing", "Checking cloud data…");
+
+      const { data, error } = await cloudClient
+        .from(CLOUD_TABLE)
+        .select("records,target,updated_at")
+        .eq("user_id", cloudUser.id)
+        .maybeSingle();
+
+      if (error) {
+        console.error("Cloud download failed:", error);
+        setCloudUI("error", "Could not read cloud data");
+        return;
+      }
+
+      const isDirty = localStorage.getItem(CLOUD_DIRTY_KEY) === "1";
+      const linkedUser = localStorage.getItem(CLOUD_LINKED_USER_KEY);
+
+      // No cloud snapshot yet: make this device the initial cloud copy.
+      if (!data) {
+        await uploadCloudSnapshot();
+        return;
+      }
+
+      // Unsynced edits on a previously linked device take priority.
+      if (isDirty && linkedUser === cloudUser.id) {
+        await uploadCloudSnapshot();
+        return;
+      }
+
+      const cloudRecords = normalizeCloudRecords(data.records);
+
+      // First time this browser is linked: preserve any existing local records
+      // by merging them once with the cloud snapshot.
+      if (linkedUser !== cloudUser.id && records.length > 0) {
+        records = mergeRecordSets(cloudRecords, records);
+        if (Number(data.target) > 0 && !localStorage.getItem(TARGET_KEY)) {
+          target = Number(data.target);
+        }
+        persistLocalSnapshot();
+        await uploadCloudSnapshot();
+        renderAll();
+        showToast("Local data merged with cloud");
+        return;
+      }
+
+      // Normal case on an already-linked device: cloud is the source of truth.
+      records = cloudRecords;
+      if (Number(data.target) > 0) target = Number(data.target);
+      targetInput.value = target;
+      targetDisplay.textContent = target;
+      localStorage.setItem(CLOUD_DIRTY_KEY, "0");
+      localStorage.setItem(CLOUD_LINKED_USER_KEY, cloudUser.id);
+      persistLocalSnapshot();
+      renderAll();
+      setCloudUI("ready", "Up to date");
+    }
+
+    async function applyCloudSession(session) {
+      cloudUser = session?.user || null;
+      if (!cloudUser) {
+        setCloudUI("signed-out");
+        return;
+      }
+      setCloudUI("syncing", "Signed in — syncing…");
+      await reconcileCloud();
+    }
+
+    async function initCloudSync() {
+      if (!cloudClient) {
+        setCloudUI("error", "Cloud library could not load");
+        return;
+      }
+
+      const { data, error } = await cloudClient.auth.getSession();
+      if (error) {
+        console.error("Could not restore cloud session:", error);
+        setCloudUI("error", "Could not restore sign-in");
+      } else {
+        await applyCloudSession(data.session);
+      }
+
+      cloudClient.auth.onAuthStateChange((_event, session) => {
+        setTimeout(() => applyCloudSession(session), 0);
+      });
     }
 
     function showToast(message) {
@@ -1182,6 +1453,7 @@
       targetDisplay.textContent = target;
       writeInternalBackup();
       updateDataSafety();
+      markCloudDirtyAndSync();
       renderAll();
       showToast("Target updated");
     });
@@ -1350,6 +1622,82 @@
       if (e.target === $("importChoiceBackdrop")) closeImportChoice();
     });
 
+    function openCloudAuthModal() {
+      $("cloudAuthStatus").textContent = "";
+      $("cloudAuthStatus").className = "auth-status";
+      $("cloudAuthBackdrop").classList.add("open");
+      setTimeout(() => $("cloudEmail").focus(), 60);
+    }
+
+    function closeCloudAuthModal() {
+      $("cloudAuthBackdrop").classList.remove("open");
+    }
+
+    function setAuthStatus(message, kind = "") {
+      const el = $("cloudAuthStatus");
+      el.textContent = message;
+      el.className = `auth-status${kind ? " " + kind : ""}`;
+    }
+
+    $("cloudAuthBtn").addEventListener("click", async () => {
+      if (!cloudClient) {
+        showToast("Cloud library unavailable");
+        return;
+      }
+      if (cloudUser) {
+        const { error } = await cloudClient.auth.signOut();
+        if (error) showToast("Could not sign out");
+        else showToast("Signed out");
+      } else {
+        openCloudAuthModal();
+      }
+    });
+
+    $("cloudSyncBtn").addEventListener("click", async () => {
+      if (!cloudUser) return openCloudAuthModal();
+      await reconcileCloud();
+      showToast("Cloud sync checked");
+    });
+
+    $("cloudSignInBtn").addEventListener("click", async () => {
+      if (!cloudClient) return setAuthStatus("Cloud library unavailable.", "error");
+      const email = $("cloudEmail").value.trim();
+      const password = $("cloudPassword").value;
+      if (!email || !password) return setAuthStatus("Enter your email and password.", "error");
+
+      setAuthStatus("Signing in…");
+      const { data, error } = await cloudClient.auth.signInWithPassword({ email, password });
+      if (error) return setAuthStatus(error.message, "error");
+
+      setAuthStatus("Signed in.", "ok");
+      if (data.session) {
+        setTimeout(closeCloudAuthModal, 350);
+      }
+    });
+
+    $("cloudCreateBtn").addEventListener("click", async () => {
+      if (!cloudClient) return setAuthStatus("Cloud library unavailable.", "error");
+      const email = $("cloudEmail").value.trim();
+      const password = $("cloudPassword").value;
+      if (!email || !password) return setAuthStatus("Enter your email and password.", "error");
+
+      setAuthStatus("Creating account…");
+      const { data, error } = await cloudClient.auth.signUp({ email, password });
+      if (error) return setAuthStatus(error.message, "error");
+
+      if (data.session) {
+        setAuthStatus("Account created and signed in.", "ok");
+        setTimeout(closeCloudAuthModal, 450);
+      } else {
+        setAuthStatus("Account created. Check your email to confirm it, then come back and sign in.", "ok");
+      }
+    });
+
+    $("closeCloudAuth").addEventListener("click", closeCloudAuthModal);
+    $("cloudAuthBackdrop").addEventListener("click", e => {
+      if (e.target === $("cloudAuthBackdrop")) closeCloudAuthModal();
+    });
+
     $("exportBtn").addEventListener("click", () => {
       if (!records.length) {
         showToast("No data to export");
@@ -1380,6 +1728,7 @@
 
     renderAll();
     initDataSafety();
+    initCloudSync();
   </script>
 </body>
 </html>
